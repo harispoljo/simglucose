@@ -5,6 +5,8 @@ from datetime import timedelta
 import logging
 from collections import namedtuple
 from simglucose.simulation.rendering import Viewer
+import numpy as np
+
 
 try:
     from rllab.envs.base import Step
@@ -23,6 +25,8 @@ except ImportError:
 Observation = namedtuple('Observation', ['CGM'])
 logger = logging.getLogger(__name__)
 
+CGM5min = 0
+CGM10min = 0
 
 def risk_diff(BG_last_hour):
     if len(BG_last_hour) < 2:
@@ -63,10 +67,15 @@ class T1DSimEnv(object):
 
         return CHO, insulin, BG, CGM
 
+
+
+
     def step(self, action, reward_fun=risk_diff):
         '''
         action is a namedtuple with keys: basal, bolus
         '''
+        global CGM5min
+        global CGM10min
         CHO = 0.0
         insulin = 0.0
         BG = 0.0
@@ -79,6 +88,7 @@ class T1DSimEnv(object):
             insulin += tmp_insulin / self.sample_time
             BG += tmp_BG / self.sample_time
             CGM += tmp_CGM / self.sample_time
+
 
         # Compute risk index
         horizon = 1
@@ -96,12 +106,16 @@ class T1DSimEnv(object):
         self.LBGI_hist.append(LBGI)
         self.HBGI_hist.append(HBGI)
 
+
         # Compute reward, and decide whether game is over
         window_size = int(60 / self.sample_time)
         BG_last_hour = self.CGM_hist[-window_size:]
         reward = reward_fun(BG_last_hour)
+
         done = BG < 70 or BG > 350
-        obs = Observation(CGM=CGM)
+        obs = np.array([(CGM-70)/280,(CGM-CGM5min+350)/700,(CGM-CGM10min+350)/700])
+        CGM10min = CGM5min
+        CGM5min = CGM
 
         return Step(
             observation=obs,
@@ -112,7 +126,12 @@ class T1DSimEnv(object):
             meal=CHO,
             patient_state=self.patient.state)
 
+
+
+
     def _reset(self):
+        global CGM5min
+        global CGM10min
         self.sample_time = self.sensor.sample_time
         self.viewer = None
 
@@ -120,6 +139,8 @@ class T1DSimEnv(object):
         horizon = 1
         LBGI, HBGI, risk = risk_index([BG], horizon)
         CGM = self.sensor.measure(self.patient)
+        CGM5min = CGM
+        CGM10min = CGM
         self.time_hist = [self.scenario.start_time]
         self.BG_hist = [BG]
         self.CGM_hist = [CGM]
@@ -130,13 +151,17 @@ class T1DSimEnv(object):
         self.insulin_hist = []
 
     def reset(self):
+        global CGM5min
+        global CGM10min
         self.patient.reset()
         self.sensor.reset()
         self.pump.reset()
         self.scenario.reset()
         self._reset()
         CGM = self.sensor.measure(self.patient)
-        obs = Observation(CGM=CGM)
+        CGM5min = CGM
+        CGM10min = CGM
+        obs = np.array([(CGM-70)/280,(CGM-CGM5min+350)/700,(CGM-CGM10min+350)/700])
         return Step(
             observation=obs,
             reward=0,
