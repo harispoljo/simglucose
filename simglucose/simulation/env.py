@@ -27,14 +27,16 @@ logger = logging.getLogger(__name__)
 
 CGM5min = 0
 CGM10min = 0
+High = 420
+Low = 55
 
-def risk_diff(BG_last_hour):
+def risk_diff(BG_last_hour,Insulin_last_hour):
     if len(BG_last_hour) < 2:
         return 0
     else:
         _, _, risk_current = risk_index([BG_last_hour[-1]], 1)
         _, _, risk_prev = risk_index([BG_last_hour[-2]], 1)
-        return risk_prev - risk_current
+        return (risk_prev - risk_current)
 
 
 class T1DSimEnv(object):
@@ -106,17 +108,19 @@ class T1DSimEnv(object):
         self.LBGI_hist.append(LBGI)
         self.HBGI_hist.append(HBGI)
 
-
         # Compute reward, and decide whether game is over
         window_size = int(60 / self.sample_time)
         BG_last_hour = self.CGM_hist[-window_size:]
-        reward = reward_fun(BG_last_hour)
+        Insulin_last_hour = self.insulin_hist[-5:]
 
-        done = BG < 70 or BG > 350
-        obs = np.array([(CGM-70)/280,(CGM-CGM5min+350)/700,(CGM-CGM10min+350)/700])
+
+
+
+        done = BG < Low or BG > High
+        obs = np.array([(CGM-Low)/(High-Low),(CGM-CGM5min-(-Low-High))/((Low+High)-(-Low-High)),(CGM-CGM10min-(-Low-High))/((Low+High)-(-Low-High))])
         CGM10min = CGM5min
         CGM5min = CGM
-
+        reward = reward_fun(BG_last_hour,Insulin_last_hour,done)
         return Step(
             observation=obs,
             reward=reward,
@@ -161,7 +165,7 @@ class T1DSimEnv(object):
         CGM = self.sensor.measure(self.patient)
         CGM5min = CGM
         CGM10min = CGM
-        obs = np.array([(CGM-70)/280,(CGM-CGM5min+350)/700,(CGM-CGM10min+350)/700])
+        obs = np.array([(CGM-Low)/(High-Low),(CGM-CGM5min-(-Low-High))/((Low+High)-(-Low-High)),(CGM-CGM10min-(-Low-High))/((Low+High)-(-Low-High))])
         return Step(
             observation=obs,
             reward=0,
