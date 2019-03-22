@@ -195,6 +195,7 @@ class T1DPatient(Patient):
         dxdt[12] = (-params.ksc * x[12] + params.ksc * x[3])
         dxdt[12] = (x[12] >= 0) * dxdt[12]
 
+    
         if action.insulin > basal:
             logger.debug('t = {}, injecting insulin: {}'.format(
                 t, action.insulin))
